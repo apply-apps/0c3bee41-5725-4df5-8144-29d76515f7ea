@@ -1,98 +1,127 @@
 // Filename: index.js
 // Combined code from all files
-import React, { useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, Button, ActivityIndicator, View } from 'react-native';
-import axios from 'axios';
+
+import React, { useState, useEffect } from 'react';
+import { SafeAreaView, View, StyleSheet, Button, Alert, Text, Dimensions } from 'react-native';
+import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
+
+const { width, height } = Dimensions.get('window');
+const cellSize = 20;
+const gridWidth = Math.floor(width / cellSize);
+const gridHeight = Math.floor(height / cellSize);
+
+function generateFoodPosition() {
+    const x = Math.floor(Math.random() * gridWidth);
+    const y = Math.floor(Math.random() * gridHeight);
+    return { x, y };
+}
 
 export default function App() {
-    const [heroes, setHeroes] = useState('');
-    const [villains, setVillains] = useState('');
-    const [plot, setPlot] = useState('');
-    const [generatedStory, setGeneratedStory] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [snake, setSnake] = useState([{ x: 5, y: 5 }]);
+    const [direction, setDirection] = useState({ x: 1, y: 0 });
+    const [food, setFood] = useState(generateFoodPosition());
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [score, setScore] = useState(0);
 
-    const generateStory = async () => {
-        setLoading(true);
-        try {
-            const response = await axios.post('http://apihub.p.appply.xyz:3300/chatgpt', {
-                messages: [
-                    { role: "system", content: "You are a helpful assistant. Please generate a fairy tale based on given heroes, villains, and plot." },
-                    { role: "user", content: `Heroes: ${heroes}, Villains: ${villains}, Plot: ${plot}` }
-                ],
-                model: "gpt-4o"
-            });
-            const { data } = response;
-            setGeneratedStory(data.response);
-        } catch (error) {
-            console.error(error);
-            setGeneratedStory('Failed to generate story.');
-        } finally {
-            setLoading(false);
+    useEffect(() => {
+        if (isPlaying) {
+            const interval = setInterval(moveSnake, 100);
+            return () => clearInterval(interval);
+        }
+    }, [snake, direction, isPlaying]);
+
+    const resetGame = () => {
+        setIsPlaying(false);
+        setSnake([{ x: 5, y: 5 }]);
+        setDirection({ x: 1, y: 0 });
+        setFood(generateFoodPosition());
+        setScore(0);
+    };
+
+    const moveSnake = () => {
+        const newPos = {
+            x: (snake[0].x + direction.x + gridWidth) % gridWidth,
+            y: (snake[0].y + direction.y + gridHeight) % gridHeight,
+        };
+
+        if (snake.some(segment => segment.x === newPos.x && segment.y === newPos.y)) {
+            setIsPlaying(false);
+            Alert.alert("Game Over", `Your score: ${score}`, [{ text: "OK", onPress: resetGame }]);
+            return;
+        }
+
+        const newSnake = [newPos, ...snake];
+
+        if (newPos.x === food.x && newPos.y === food.y) {
+            setFood(generateFoodPosition());
+            setScore(score + 1);
+        } else {
+            newSnake.pop();
+        }
+
+        setSnake(newSnake);
+    };
+
+    const handleGesture = (event) => {
+        const { translationX, translationY } = event.nativeEvent;
+        if (Math.abs(translationX) > Math.abs(translationY)) {
+            if (translationX > 0 && direction.x !== -1) setDirection({ x: 1, y: 0 });
+            else if (translationX < 0 && direction.x !== 1) setDirection({ x: -1, y: 0 });
+        } else {
+            if (translationY > 0 && direction.y !== -1) setDirection({ x: 0, y: 1 });
+            else if (translationY < 0 && direction.y !== 1) setDirection({ x: 0, y: -1 });
         }
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollView}>
-                <Text style={styles.title}>Fairy Tale Generator</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter Heroes"
-                    value={heroes}
-                    onChangeText={setHeroes}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter Villains"
-                    value={villains}
-                    onChangeText={setVillains}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter Plot"
-                    value={plot}
-                    onChangeText={setPlot}
-                />
-                <Button title="Generate Story" onPress={generateStory} />
-                {loading ? (
-                    <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
-                ) : (
-                    <Text style={styles.storyText}>{generatedStory}</Text>
-                )}
-            </ScrollView>
-        </SafeAreaView>
+        <GestureHandlerRootView style={styles.root}>
+            <SafeAreaView style={styles.container}>
+                <Text style={styles.score}>Score: {score}</Text>
+                <PanGestureHandler onGestureEvent={handleGesture}>
+                    <View style={styles.canvas}>
+                        {snake.map((segment, index) => (
+                            <View key={index} style={[styles.snake, { left: segment.x * cellSize, top: segment.y * cellSize }]} />
+                        ))}
+                        <View style={[styles.food, { left: food.x * cellSize, top: food.y * cellSize }]} />
+                    </View>
+                </PanGestureHandler>
+                <Button title={isPlaying ? "Pause" : "Play"} onPress={() => setIsPlaying(!isPlaying)} />
+                <Button title="Reset" onPress={resetGame} />
+            </SafeAreaView>
+        </GestureHandlerRootView>
     );
 }
 
 const styles = StyleSheet.create({
+    root: {
+        flex: 1,
+    },
     container: {
         flex: 1,
-        marginTop: 50,
-    },
-    scrollView: {
-        padding: 20,
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        marginBottom: 20,
-    },
-    input: {
-        borderWidth: 1,
-        borderColor: '#ccc',
-        borderRadius: 5,
-        padding: 10,
-        marginBottom: 10,
-        width: '100%',
-    },
-    loader: {
-        marginVertical: 20,
-    },
-    storyText: {
         marginTop: 20,
-        fontSize: 18,
-        textAlign: 'center',
+    },
+    canvas: {
+        width: width,
+        height: height - 80,
+        backgroundColor: '#fff',
+        position: 'relative',
+    },
+    snake: {
+        width: cellSize,
+        height: cellSize,
+        backgroundColor: 'green',
+        position: 'absolute',
+    },
+    food: {
+        width: cellSize,
+        height: cellSize,
+        backgroundColor: 'red',
+        position: 'absolute',
+    },
+    score: {
+        fontSize: 24,
+        marginBottom: 10,
     },
 });
